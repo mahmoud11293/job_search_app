@@ -6,12 +6,14 @@ import {
   signup,
   verifyEmail,
   signin,
+  logOut,
   updateAccount,
   deleteAccount,
   userAccountData,
   profileData,
   updatePassword,
   forgetPassword,
+  resetPassword,
   recoveryEmail,
 } from "./user.controller.js";
 import { authMiddleware } from "../../Middlewares/auth.middleware.js";
@@ -20,48 +22,94 @@ import { validationMiddleware } from "../../Middlewares/validation.middleware.js
 // Imported Validation Schemas
 import {
   signupSchema,
+  verifySchema,
   signInSchema,
+  logOutSchema,
   updateUserSchema,
+  deleteAccountSchema,
+  userAccountDataSchema,
+  profileDataSchema,
   updatePasswordSchema,
   forgetPasswordSchema,
+  resetPasswordSchema,
   recoveryEmailShema,
 } from "./user.schema.js";
 // sign Up API
-router.post("/signup", validationMiddleware(signupSchema), errorHandle(signup));
+router.post(
+  "/signup",
+  errorHandle(validationMiddleware(signupSchema)),
+  errorHandle(signup)
+);
 // verify Email API
-router.get("/verify-email/:token", errorHandle(verifyEmail));
+router.get(
+  "/verify-email/:token",
+  errorHandle(validationMiddleware(verifySchema)),
+  errorHandle(verifyEmail)
+);
 // sign In API
-router.post("/signin", validationMiddleware(signInSchema), errorHandle(signin));
+router.post(
+  "/signin",
+  errorHandle(validationMiddleware(signInSchema)),
+  errorHandle(signin)
+);
+// Log out
+router.patch(
+  "/logout",
+  errorHandle(authMiddleware()),
+  errorHandle(validationMiddleware(logOutSchema)),
+  errorHandle(logOut)
+);
 // Update Account API
 router.put(
   "/update",
-  authMiddleware(),
-  validationMiddleware(updateUserSchema),
+  errorHandle(authMiddleware()),
+  errorHandle(validationMiddleware(updateUserSchema)),
   errorHandle(updateAccount)
 );
 // Delete Account API
-router.delete("/delete", authMiddleware(), errorHandle(deleteAccount));
+router.delete(
+  "/delete",
+  errorHandle(authMiddleware()),
+  errorHandle(validationMiddleware(deleteAccountSchema)),
+  errorHandle(deleteAccount)
+);
 // Get user account data API
-router.get("/user-data", authMiddleware(), errorHandle(userAccountData));
+router.get(
+  "/user-data",
+  errorHandle(authMiddleware()),
+  errorHandle(validationMiddleware(userAccountDataSchema)),
+  errorHandle(userAccountData)
+);
 // Get profile data for another user
-router.get("/profile-data/:userId", authMiddleware(), errorHandle(profileData));
+router.get(
+  "/profile-data/:userId",
+  errorHandle(authMiddleware()),
+  errorHandle(validationMiddleware(profileDataSchema)),
+  errorHandle(profileData)
+);
 // update Password API
 router.patch(
   "/update-pass",
-  authMiddleware(),
-  validationMiddleware(updatePasswordSchema),
+  errorHandle(authMiddleware()),
+  errorHandle(validationMiddleware(updatePasswordSchema)),
   errorHandle(updatePassword)
 );
 // forget Password API
-router.post(
+router.patch(
   "/forgot-password",
-  validationMiddleware(forgetPasswordSchema),
+  errorHandle(validationMiddleware(forgetPasswordSchema)),
   errorHandle(forgetPassword)
+);
+// Reset Password API
+router.patch(
+  "/reset-password",
+  errorHandle(validationMiddleware(resetPasswordSchema)),
+  errorHandle(resetPassword)
 );
 // Get all accounts associated to a specific recovery Email API
 router.get(
   "/recovery-email/:recoveryEmail",
-  validationMiddleware(recoveryEmailShema),
+  errorHandle(validationMiddleware(recoveryEmailShema)),
   errorHandle(recoveryEmail)
 );
 

@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 // ====================== Add company ======================
 export const addCompany = async (req, res, next) => {
   // destruct data
+  const { _id } = req.authUser;
   const {
     companyName,
     description,
@@ -14,10 +15,11 @@ export const addCompany = async (req, res, next) => {
     address,
     numberOfEmployees,
     companyEmail,
-    companyHR,
   } = req.body;
   // check if Company exist
-  const isCompanyExist = await Company.findOne({ companyName });
+  const isCompanyExist = await Company.findOne({
+    $or: [{ companyName }, { companyEmail }, { companyHR: _id }],
+  });
   if (isCompanyExist)
     return next(new ErrorHandler("The company is already exist", 400));
   // object data
@@ -28,7 +30,7 @@ export const addCompany = async (req, res, next) => {
     address,
     numberOfEmployees,
     companyEmail,
-    companyHR,
+    companyHR: _id,
   });
   // create company
   const addCompany = await companyData.save();
@@ -39,20 +41,20 @@ export const addCompany = async (req, res, next) => {
 export const updateCompany = async (req, res, next) => {
   // destruct data
   const { companyId } = req.params;
-  const { _id, role } = req.authUser;
+  const { _id } = req.authUser;
   const { companyName, industry, address, numberOfEmployees, companyEmail } =
     req.body;
-  // check for Company HR
-  if (role !== "Company_HR") return next(new ErrorHandler("Unauthorized", 403));
-  // find company by id
-  const company = await Company.findById(companyId);
-  // check if company not exist
-  if (!company) return next(new ErrorHandler("Company not found", 404));
-  // check about HR id
-  if (company.companyHR.toString() !== _id.toString())
-    return next(
-      new ErrorHandler("Only the company owner can update the data", 401)
-    );
+  // find company
+  const company = await Company.findOne({
+    _id: companyId,
+    companyName,
+    companyEmail,
+  });
+  // check if company name exist
+  if (company) return next(new ErrorHandler("Company already exists", 404));
+  // check companyHR id
+  if (company?.companyHR.toString() !== _id.toString())
+    return next(new ErrorHandler("you not allowed to update this company"));
 
   // update company data
   const updateCompany = await Company.findByIdAndUpdate(
@@ -77,7 +79,7 @@ export const deleteCompany = async (req, res, next) => {
   // check about HR id
   if (company.companyHR.toString() !== _id.toString())
     return next(
-      new ErrorHandler("Only the company owner can delete the data", 401)
+      new ErrorHandler("you not allowed to delete this company", 401)
     );
   // delete company
   await Company.findByIdAndDelete(companyId);
@@ -103,7 +105,9 @@ export const searchCompany = async (req, res, next) => {
   // destruct data
   const { companyName } = req.params;
   // find company by name
-  const company = await Company.findOne({ companyName });
+  const company = await Company.findOne({
+    companyName: { $regex: companyName, $options: "i" },
+  });
   // check if company exsit
   if (!company) return next(new ErrorHandler("Company not found", 404));
 
@@ -113,27 +117,18 @@ export const searchCompany = async (req, res, next) => {
 
 export const appSpecificJobs = async (req, res, next) => {
   // destruct data
-  const jobId = req.params.jobId;
-  const companyId = req.authUser.companyId;
-
-  // Check if the user is a Company_HR and has access to the job
-  if (
-    req.authUser.role !== "Company_HR" ||
-    req.authUser.companyId !== companyId
-  ) {
-    return next(new ErrorHandler("Unauthorized", 403));
-  }
+  const { jobId } = req.params;
   // find job by id
-  const job = await mongoose.model("Job").findById(jobId);
+  const job = await Job.findById(jobId);
   // check if job exist
   if (!job) {
     return next(new ErrorHandler("Job not found", 404));
   }
   // get user and his applications for job
-  const applications = await mongoose
-    .model("Application")
-    .find({ jobId })
-    .populate({ path: "userId", select: "firstName lastName username email" });
+  const applications = await Application.find({ jobId }).populate({
+    path: "userId",
+    select: "firstName lastName username email",
+  });
 
   res.json(applications);
 };

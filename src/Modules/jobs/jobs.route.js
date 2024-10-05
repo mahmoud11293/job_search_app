@@ -10,7 +10,7 @@ import {
   addJob,
   updateJob,
   deleteJob,
-  getAllJobs,
+  JobsWithCompanies,
   jobsSpecificCompany,
   jobsMatchFilters,
   applyToJob,
@@ -19,8 +19,10 @@ import {
 import {
   addJobSchema,
   updateJobSchema,
+  deleteJobSchema,
+  jobsSpecificCompanySchema,
   matchFiltersSchema,
-  ApplyJob,
+  applyToJobSchema,
 } from "./jobs.schema.js";
 
 const { USER, HR } = systemRoles;
@@ -46,6 +48,7 @@ router.delete(
   "/delete-job/:jobId",
   authMiddleware(),
   authorization(HR),
+  validationMiddleware(deleteJobSchema),
   errorHandle(deleteJob)
 );
 // Get all Jobs with their company’s information API
@@ -53,13 +56,14 @@ router.get(
   "/get-jobs",
   authMiddleware(),
   authorization([USER, HR]),
-  errorHandle(getAllJobs)
+  errorHandle(JobsWithCompanies)
 );
 // Get all Jobs for a specific company API
 router.get(
   "/jobs-company",
   authMiddleware(),
   authorization([USER, HR]),
+  validationMiddleware(jobsSpecificCompanySchema),
   errorHandle(jobsSpecificCompany)
 );
 // Get all Jobs that match the following filters API
@@ -75,7 +79,7 @@ router.post(
   "/apply-job",
   authMiddleware(),
   authorization(USER),
-  validationMiddleware(ApplyJob),
+  validationMiddleware(applyToJobSchema),
   errorHandle(applyToJob)
 );
 

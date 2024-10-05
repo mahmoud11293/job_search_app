@@ -6,6 +6,7 @@ import { ErrorHandler } from "../../utils/error-class.utils.js";
 // ==================== Add Job ====================
 export const addJob = async (req, res, next) => {
   // destruct data
+  const { authUser } = req;
   const {
     jobTitle,
     jobLocation,
@@ -14,7 +15,6 @@ export const addJob = async (req, res, next) => {
     jobDescription,
     technicalSkills,
     softSkills,
-    addedBy,
   } = req.body;
   // object data
   const jobData = new Job({
@@ -25,7 +25,7 @@ export const addJob = async (req, res, next) => {
     jobDescription,
     technicalSkills,
     softSkills,
-    addedBy,
+    addedBy: authUser._id,
   });
   // create company
   await jobData.save();
@@ -35,20 +35,20 @@ export const addJob = async (req, res, next) => {
 export const updateJob = async (req, res, next) => {
   // destruct data
   const { jobId } = req.params;
-  const { _id, role } = req.authUser;
+  const { _id } = req.authUser;
   const { jobTitle, jobLocation, workingTime, seniorityLevel, jobDescription } =
     req.body;
-  // check for job HR
-  if (role !== "Company_HR") return next(new ErrorHandler("Unauthorized", 403));
 
   // find job by id
   const job = await Job.findById(jobId);
-  // check if company not exist
+  // check if job not exist
   if (!job) return next(new ErrorHandler("job not found", 404));
 
   // check if hr id the same
   if (job.addedBy.toString() !== _id.toString())
-    return next(new ErrorHandler("Only the Hr can update the data", 401));
+    return next(
+      new ErrorHandler("you are not allowed to update this job", 401)
+    );
   // update job data
   const updateJob = await Job.findByIdAndUpdate(
     jobId,
@@ -64,33 +64,35 @@ export const updateJob = async (req, res, next) => {
 export const deleteJob = async (req, res, next) => {
   // destruct data
   const { jobId } = req.params;
-  const { role, _id } = req.authUser;
-  // check for job HR
-  if (role !== "Company_HR") return next(new ErrorHandler("Unauthorized", 403));
+  const { _id } = req.authUser;
   // find job
   const job = await Job.findById(jobId);
   // check if job not exist
   if (!job) {
     return next(new ErrorHandler("Job not found", 404));
   }
-  // check if hr id the same
+  // check if hr id not the same
   if (job.addedBy.toString() !== _id.toString())
-    return next(new ErrorHandler("Only the Hr can delete the data", 401));
+    return next(
+      new ErrorHandler("you are not allowed to delete this job", 401)
+    );
   // delete job by id
   await Job.findByIdAndDelete(jobId);
   res.status(200).json({ message: "Delete success" });
 };
 // =============== Get all Jobs with their company’s information ===============
-export const getAllJobs = async (req, res, next) => {
-  const jobs = await Job.find().populate("addedBy", "companyHR").exec();
-
-  const jobsWithCompanyInfo = await Promise.all(
-    jobs.map(async (job) => {
-      const company = await Company.findOne({ companyHR: job.addedBy }).exec();
-      return { ...job.toObject(), company };
-    })
-  );
-  res.status(200).json(jobsWithCompanyInfo);
+export const JobsWithCompanies = async (req, res, next) => {
+  const JobsWithCompanies = await Job.aggregate([
+    {
+      $lookup: {
+        from: "companies",
+        localField: "addedBy",
+        foreignField: "companyHR",
+        as: "company info",
+      },
+    },
+  ]);
+  res.status(200).json(JobsWithCompanies);
 };
 // ==================== Get all Jobs for a specific company ====================
 export const jobsSpecificCompany = async (req, res, next) => {
@@ -130,10 +132,8 @@ export const jobsMatchFilters = async (req, res, next) => {
 // ==================== Apply to Job ====================
 export const applyToJob = async (req, res, next) => {
   // destruct data
-  const { jobId } = req.body;
-  // check about user authorized
-  if (req.authUser.role !== "User")
-    return next(new ErrorHandler("Unauthorized", 403));
+  const { jobId, userTechSkills, userSoftSkills } = req.body;
+  const { _id } = req.authUser;
   // find job by id
   const job = await Job.findById(jobId);
   // check if job not exist
@@ -141,9 +141,9 @@ export const applyToJob = async (req, res, next) => {
   // object new application data
   const application = new Application({
     jobId,
-    userId: req.authUser._id,
-    userTechSkills: req.body.userTechSkills,
-    userSoftSkills: req.body.userSoftSkills,
+    userId: _id,
+    userTechSkills,
+    userSoftSkills,
   });
   // saving the data
   await application.save();

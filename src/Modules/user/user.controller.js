@@ -19,9 +19,11 @@ export const signup = async (req, res, next) => {
     role,
   } = req.body;
   // check if email exist
-  const isEmailExist = await User.findOne({ email });
-  if (isEmailExist) {
-    return next(new ErrorHandler("Email already exist", 409));
+  const isEmailOrPhoneExist = await User.findOne({
+    $or: [{ email }, { mobileNumber }, { recoveryEmail }],
+  });
+  if (isEmailOrPhoneExist) {
+    return next(new ErrorHandler("Email or Recovery Email already exist", 409));
   }
   // object data
   const user = new User({
@@ -35,7 +37,7 @@ export const signup = async (req, res, next) => {
     mobileNumber,
     role,
   });
-  // generate token for _id
+  // generate token for Confirmation Email
   const token = jwt.sign(
     { userId: user._id },
     process.env.CONFIRMATION_TOKEN_FOR_EMAIL,
@@ -44,20 +46,20 @@ export const signup = async (req, res, next) => {
     }
   );
   // generate email confirmation link
-  const confirmationLink = `${req.protocol}://${req.headers.host}/users/verify-email?${token}`;
+  const confirmationLink = `${req.protocol}://${req.headers.host}/users/verify-email/${token}`;
   // sending email
   const isEmailSent = sendEmailService({
     to: email,
     subject: "Welcome to search app",
-    htmlMessage: `<h1><a href=${confirmationLink}>Please verify your email address</a></h1>`,
+    htmlMessage: `<h1><a href=${confirmationLink}>Please verify your account</a></h1>`,
   });
   // check if email sent
   if (isEmailSent?.rejected?.length)
-    return next(new ErrorHandler("Verification Email Failed sending ", 500));
+    return next(new ErrorHandler(" Email Failed sending ", 500));
 
   // create user
-  await user.save();
-  res.status(201).json({ message: "User created successfully", user });
+  const newUser = await user.save();
+  res.status(201).json({ message: "User created successfully", newUser });
 };
 
 // ================= verify Email =================
@@ -84,18 +86,19 @@ export const signin = async (req, res, next) => {
       { email: emailOrmobileNumber },
       { mobileNumber: emailOrmobileNumber },
     ],
+    isConfirmed: true,
   });
-  // check user
-  if (!user)
-    return next(
-      new ErrorHandler(
-        "message: 'Invalid email/mobile number or password'",
-        401
-      )
-    );
-  // check password
-  const checkPassword = compareSync(password, user.password);
-  if (!checkPassword)
+
+  // check if account verified
+  if (!user?.isConfirmed)
+    return next(new ErrorHandler("You need to verify your account first"));
+
+  // check user & check password
+  if (
+    !user.email ||
+    !user.mobileNumber ||
+    !compareSync(password, user.password)
+  )
     return next(
       new ErrorHandler(
         "message: 'Invalid email/mobile number or password'",
@@ -104,12 +107,8 @@ export const signin = async (req, res, next) => {
     );
 
   // change user state
-  if (user !== null) {
-    user.status = "online";
-    await user.save();
-  } else {
-    return next(new ErrorHandler("message: 'User not found'", 404));
-  }
+  user.status = "online";
+  await user.save();
 
   // Generate user token
   const token = jwt.sign(
@@ -117,8 +116,22 @@ export const signin = async (req, res, next) => {
     process.env.LOGIN_SECRET,
     { expiresIn: "1h" }
   );
-
+  // response
   res.status(200).json({ message: "Logged in successfully", token });
+};
+
+// ================= Log out =================
+export const logOut = async (req, res) => {
+  // destruct data
+  const { _id } = req.authUser;
+  // find user by id
+  const user = await User.findById(_id);
+  // change status
+  user.status = "offline";
+  // save the changes
+  await user.save();
+  // response
+  res.status(200).json({ message: "logged out success" });
 };
 // ================= update account =================
 export const updateAccount = async (req, res, next) => {
@@ -148,12 +161,13 @@ export const updateAccount = async (req, res, next) => {
   // updating data
   user.firstName = firstName || user.firstName;
   user.lastName = lastName || user.lastName;
+  user.username = user.firstName + " " + user.lastName;
   user.email = email || user.email;
   user.recoveryEmail = recoveryEmail || user.recoveryEmail;
   user.DOB = DOB || user.DOB;
   user.mobileNumber = mobileNumber || user.mobileNumber;
 
-  // generate token for _id
+  // generate token
   const token = jwt.sign(
     { userId: user._id },
     process.env.SECRET_UPDATE_EMAIL,
@@ -162,7 +176,7 @@ export const updateAccount = async (req, res, next) => {
     }
   );
   // generate email confirmation link
-  const confirmationLink = `${req.protocol}://${req.headers.host}/users/verify-email?${token}`;
+  const confirmationLink = `${req.protocol}://${req.headers.host}/users/verify-email/${token}`;
   // sending email
   const isEmailSent = sendEmailService({
     to: email,
@@ -174,6 +188,7 @@ export const updateAccount = async (req, res, next) => {
     return next(new ErrorHandler("Verification Email Failed sending ", 500));
 
   await user.save();
+  // response
   res.status(200).json({ message: "Account updated successfully" });
 };
 // ================= delete account =================
@@ -184,6 +199,7 @@ export const deleteAccount = async (req, res, next) => {
   const deleteAccount = await User.findByIdAndDelete(_id);
   // check if Delete Failed
   if (!deleteAccount) return next(new ErrorHandler("Delete Failed", 400));
+  // response
   res.status(200).json({ message: "Delete success" });
 };
 // ================= Get user account data =================
@@ -191,22 +207,13 @@ export const userAccountData = async (req, res, next) => {
   // destruct data
   const { _id } = req.authUser;
   // find user
-  const user = await User.findById(_id);
+  const user = await User.findById(_id).select(
+    "-_id -password -__v -isConfirmed -otp"
+  );
   // check if user not exist
   if (!user) return next(new ErrorHandler("User not found", 404));
-  // The data that will be returned
-  const userData = {
-    firstName: user.firstName,
-    lastName: user.lastName,
-    username: user.username,
-    email: user.email,
-    recoveryEmail: user.recoveryEmail,
-    DOB: user.DOB,
-    mobileNumber: user.mobileNumber,
-    role: user.role,
-    status: user.status,
-  };
-  res.status(200).json({ userData });
+  // response
+  res.status(200).json({ user });
 };
 // ================= Get profile data for another user  =================
 export const profileData = async (req, res, next) => {
@@ -214,21 +221,17 @@ export const profileData = async (req, res, next) => {
   const { _id } = req.authUser;
   const { userId } = req.params;
   // find user by id
-  const login = await User.findById(_id);
-  //check if not login
-  if (!login) return next(new ErrorHandler("You are not login", 401));
+  const user = await User.findById(_id);
+  //check if user not found
+  if (!user) return next(new ErrorHandler("User not found ", 401));
   // find another user
-  const profileUser = await User.findById(userId);
+  const profileUser = await User.findById(userId).select(
+    "-_id -password -__v -isConfirmed -otp"
+  );
   // check if another user found
   if (!profileUser) return next(new ErrorHandler("User not found", 404));
-  // another profile data
-  const profileUserData = {
-    username: profileUser.username,
-    bithday: profileUser.DOB,
-    phone: profileUser.mobileNumber,
-    status: profileUser.status,
-  };
-  res.status(200).json(profileUserData);
+  // response
+  res.status(200).json(profileUser);
 };
 
 // ================= Update password =================
@@ -267,8 +270,7 @@ export const forgetPassword = async (req, res, next) => {
   });
 
   user.otp = otp;
-  // OTP valid for 1 hour
-  user.otpExpiration = Date.now() + 3600000;
+
   // send new password to email
   const isEmailSent = sendEmailService({
     to: email,
@@ -281,8 +283,28 @@ export const forgetPassword = async (req, res, next) => {
       new ErrorHandler("Failed sending new password to your email", 500)
     );
 
-  await user.save();
+  await User.updateOne({ email }, { otp: otp });
   res.status(200).json({ message: "new Password sent your email" });
+};
+// ================= Reset password =================
+export const resetPassword = async (req, res, next) => {
+  // destruct data
+  const { email, otp, password } = req.body;
+  // find user by email
+  const user = await User.findOne({ email });
+  // check if email exist
+  if (!user) return next(new ErrorHandler("User not found", 404));
+  // check if otp not correct
+  if (user.otp !== otp) return next(new Error("Invalid reset password", 400));
+  // hash new password
+  const hash = hashSync(password, +process.env.SALT_ROUND);
+  // change password
+  await User.updateOne(
+    { email },
+    { password: hash, otp: "", passwordChangeAt: Date.now() }
+  );
+  // response
+  res.status(200).json({ message: "Password changed successfully" });
 };
 // ================= Get all accounts associated to a specific recovery Email  =================
 export const recoveryEmail = async (req, res, next) => {

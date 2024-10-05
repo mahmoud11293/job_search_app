@@ -48,6 +48,8 @@ const userSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  passwordChangeAt: Date,
+  otp: String,
 });
 
 export default mongoose.models.User || model("User", userSchema);

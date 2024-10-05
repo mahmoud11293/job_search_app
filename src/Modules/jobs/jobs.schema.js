@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { generalRules } from "../../utils/general-rules.utils.js";
 
 // Add Job Shema
 export const addJobSchema = {
@@ -10,9 +11,12 @@ export const addJobSchema = {
       .valid("Junior", "Mid-Level", "Senior", "Team-Lead", "CTO")
       .required(),
     jobDescription: Joi.string().required(),
-    technicalSkills: Joi.array().required(),
-    softSkills: Joi.array().required(),
-    addedBy: Joi.required(),
+    technicalSkills: Joi.array().items(Joi.string()).required(),
+    softSkills: Joi.array().items(Joi.string()).required(),
+  }),
+  headers: Joi.object({
+    token: Joi.string().required(),
+    ...generalRules.headers,
   }),
 };
 // Update Job Schema
@@ -26,7 +30,31 @@ export const updateJobSchema = {
       .required(),
     jobDescription: Joi.string().required(),
   }),
+  headers: Joi.object({
+    token: Joi.string().required(),
+    ...generalRules.headers,
+  }),
+  params: Joi.object({
+    jobId: generalRules._id.required(),
+  }),
 };
+// delete job schema
+export const deleteJobSchema = {
+  headers: Joi.object({
+    token: Joi.string().required(),
+    ...generalRules.headers,
+  }),
+  params: Joi.object({
+    jobId: generalRules._id.required(),
+  }),
+};
+// Jobs for a specific company Schema
+export const jobsSpecificCompanySchema = {
+  query: Joi.object({
+    companyName: Joi.string().required(),
+  }),
+};
+// Jobs match filters
 export const matchFiltersSchema = {
   query: Joi.object({
     workingTime: Joi.string()
@@ -40,10 +68,15 @@ export const matchFiltersSchema = {
     technicalSkills: Joi.array().items(Joi.string()).optional(),
   }),
 };
-export const ApplyJob = {
+//  Apply to Job Schema
+export const applyToJobSchema = {
   body: Joi.object({
-    jobId: Joi.required(),
-    userTechSkills: Joi.array().required(),
-    userSoftSkills: Joi.array().required(),
+    userTechSkills: Joi.array().items(Joi.string()).optional(),
+    userSoftSkills: Joi.array().items(Joi.string()).optional(),
+    jobId: generalRules._id.required(),
+  }),
+  headers: Joi.object({
+    token: Joi.string().required(),
+    ...generalRules.headers,
   }),
 };

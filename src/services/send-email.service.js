@@ -24,4 +24,5 @@ export const sendEmailService = async ({
     subject,
     html: htmlMessage,
   });
+  return info;
 };

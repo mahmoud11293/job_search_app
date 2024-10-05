@@ -21,6 +21,7 @@ import {
   deleteCompanySchema,
   getCompanyDataSchema,
   searchCompanySchema,
+  GetAllApplicationsSchema,
 } from "./company.schema.js";
 
 const { USER, HR } = systemRoles;
@@ -70,6 +71,7 @@ router.get(
   "/:jobId/applications",
   authMiddleware(),
   authorization(HR),
+  validationMiddleware(GetAllApplicationsSchema),
   errorHandle(appSpecificJobs)
 );
 
